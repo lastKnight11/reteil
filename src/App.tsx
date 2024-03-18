@@ -1,0 +1,110 @@
+import React, { useEffect, useState } from "react";
+import "./App.css";
+import { RetellWebClient } from "retell-client-js-sdk";
+
+const agentId = "009a71e6af8c0ac81c3cb5253aac4094";
+
+interface RegisterCallResponse {
+  call_id?: string;
+  sample_rate: number;
+}
+
+const webClient = new RetellWebClient();
+
+const App = () => {
+  const [isCalling, setIsCalling] = useState(false);
+  const[showtranscript,setShowtranscript] = useState(false);
+
+  // Initialize the SDK
+  useEffect(() => {
+    // Setup event listeners
+    webClient.on("conversationStarted", () => {
+      console.log("conversationStarted");
+    });
+
+    webClient.on("audio", (audio: Uint8Array) => {
+      console.log("There is audio");
+    });
+
+    webClient.on("conversationEnded", ({ code, reason }) => {
+      console.log("Closed with code:", code, ", reason:", reason);
+      setIsCalling(false); // Update button to "Start" when conversation ends
+      setShowtranscript(true);
+    });
+
+    webClient.on("error", (error) => {
+      console.error("An error occurred:", error);
+      setIsCalling(false); // Update button to "Start" in case of error
+    });
+
+    webClient.on("update", (update) => {
+      // Print live transcript as needed
+      console.log("update", update);
+    });
+  }, []);
+
+  const toggleConversation = async () => {
+    if (isCalling) {
+      webClient.stopConversation();
+    } else {
+      const registerCallResponse = await registerCall(agentId);
+      console.log(registerCallResponse.call_id)
+      if (registerCallResponse.call_id) {
+        webClient
+          .startConversation({
+            callId: registerCallResponse.call_id,
+            sampleRate: registerCallResponse.sample_rate,
+            enableUpdate: true,
+          })
+          .catch(console.error);
+        setIsCalling(true); // Update button to "Stop" when conversation starts
+      }
+    }
+  };
+
+  async function registerCall(agentId: string): Promise<RegisterCallResponse> {
+    try {
+      // Replace with your server url
+      const response = await fetch(
+        "https://api.retellai.com/register-call",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer df47a312-c779-45d5-87a7-4eac99089175"
+          },
+          body: JSON.stringify({
+            "agent_id": "009a71e6af8c0ac81c3cb5253aac4094",
+            "audio_websocket_protocol": "web",
+            "audio_encoding": "s16le",
+            "sample_rate": 24000
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status}`);
+      }
+
+      const data: RegisterCallResponse = await response.json();
+      return data;
+    } catch (err) {
+      console.log(err);
+      throw new Error(err);
+    }
+  }
+
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <button onClick={toggleConversation}>
+          {isCalling ? "Stop" : "Start"}
+        </button>
+        {showtranscript && <div>Transcript</div>}
+      </header>
+    </div>
+  );
+};
+
+export default App;
